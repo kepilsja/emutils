@@ -17,17 +17,12 @@ PATCH – Bug fixes, small improvements
 ### Fixed
 - ...
 
-## [1.x.x]
+## [1.0.2]
 ### Added
 - Docstrings with source of material dispersion formulas and input validation for material.py
-- Sketch of abstract interface class for numerical solvers
+- Template files abstract interface class for numerical solvers
 - Tool for far-field numerical aperture estimation
-
-### Changed
-- ...
-
-### Fixed
-- ...
+- Folder for future visualization tools
 
 ## [1.0.1]
 ### Fixed
