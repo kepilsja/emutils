@@ -20,7 +20,7 @@ update_changelog:
     # Run your script to modify the CHANGELOG.md file
     - echo "Setting execute permission on script..."
     - chmod +x scripts/bump_changelog.sh
-    - scripts/bump_changelog.sh
+    - sh scripts/bump_changelog.sh
     
     # Check if the script actually made a change
     - |
