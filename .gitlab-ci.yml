@@ -4,7 +4,8 @@ stages:
 bump_changelog:
   stage: release
   script:
-    - .gitlab/scripts/bump_changelog.sh
+    - chmod +x .gitlab/scripts/bump_changelog.sh
+    - bash .gitlab/scripts/bump_changelog.sh
     - git config user.email "ci@example.com"
     - git config user.name "CI Bot"
     - git add CHANGELOG.md
