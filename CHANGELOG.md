@@ -4,7 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## Versioning semantic
 MAJOR – Breaking changes
+
 MINOR – New features, but backward-compatible
+
 PATCH – Bug fixes, small improvements
 
 ## [Unreleased] - patch
