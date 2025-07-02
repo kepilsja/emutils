@@ -1,5 +1,3 @@
-#!/bin/bash
-
 stages:
   - release
 
@@ -17,6 +15,7 @@ update_changelog:
     - git remote set-url origin "https://${DEPLOY_USER}:${DEPLOY_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
     
   script:
+    - ls -lR
     - echo "✅ Starting changelog update..."
     # Run your script to modify the CHANGELOG.md file
     - echo "Setting execute permission on script..."
