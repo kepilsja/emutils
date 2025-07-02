@@ -16,6 +16,7 @@ update_changelog:
     - apk add --no-cache --upgrade bash
     
   script:
+    - echo "simple mod"
     - chmod -x scripts/bump_changelog.sh
     - bash scripts/bump_changelog.sh
 
