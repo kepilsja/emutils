@@ -1,9 +1,4 @@
 # Changelog
-## [Unreleased] - TYPE
-## [1.0.2] - 2025-07-02
-### Added
-- CI pipeline
-
 All notable changes to this project will be documented in this file.
 
 ## Versioning semantic
@@ -12,6 +7,10 @@ MAJOR – Breaking changes
 MINOR – New features, but backward-compatible
 
 PATCH – Bug fixes, small improvements
+
+## [Unreleased] - patch
+### Added
+- CI pipeline
 
 ## [1.0.1] - 2025-07-02
 ### Added
