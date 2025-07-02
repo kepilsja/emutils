@@ -19,7 +19,8 @@ update_changelog:
   script:
     - echo "✅ Starting changelog update..."
     # Run your script to modify the CHANGELOG.md file
-    - chmod -x .gitlab/scripts/bump_changelog.sh
+    - echo "Setting execute permission on script..."
+    - chmod +x .gitlab/scripts/bump_changelog.sh
     - .gitlab/scripts/bump_changelog.sh
     
     # Check if the script actually made a change
