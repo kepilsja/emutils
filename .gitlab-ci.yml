@@ -28,11 +28,9 @@ update_changelog:
         echo "✅ No changes to CHANGELOG.md. Nothing to commit."
       else
         echo "📝 Changes detected. Committing and pushing..."
-        # Add the changed file to the staging area
         - git add CHANGELOG.md
-        # Commit the file. The [skip ci] is CRITICAL to prevent an infinite pipeline loop.
-        - 'git commit -m "ci: Update CHANGELOG.md for new version [skip ci]"'
-        # Push the commit to the same branch the job is running on
+        # CORRECTED LINE: Use a static, reliable commit message.
+        - git commit -m "ci: Update CHANGELOG.md [skip ci]"
         - git push origin HEAD:${CI_COMMIT_REF_NAME}
         echo "🚀 Changelog pushed to repository."
       fi
