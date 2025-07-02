@@ -58,16 +58,20 @@ def eim_rib(w: float, core_h: float, clad_h:float , lbd:float,
     clad_h *= um
     lbd *= um
     
-    core_n_eff = solve_1D_analytic(lbd, core_h, n1, n2, n3, mode)[0][0]
-    clad_n_eff = solve_1D_analytic(lbd, clad_h, n1, n2, n3, mode)[0][0]
+    core_n_eff = solve_1D_analytic(lbd, core_h, n1, n2, n3, mode)[0]
+    clad_n_eff = solve_1D_analytic(lbd, clad_h, n1, n2, n3, mode)[0]
     
     if not core_n_eff:
         raise ValueError("No solution in section I found for the given parameters.")
     if not clad_n_eff:
         raise ValueError("No solution in section II found for the given parameters.")
 
-    n_eff = solve_1D_analytic(lbd, w, clad_n_eff, core_n_eff, clad_n_eff, mode='TM' if mode=='TE' else 'TM')[0][0]
+    n_eff = solve_1D_analytic(lbd, w, clad_n_eff[0], core_n_eff[0], clad_n_eff[0],
+                              mode='TM' if mode=='TE' else 'TM')[0]
 
-    return n_eff
+    if not n_eff:
+        raise ValueError("No solution in the rib waveguide found for the given parameters.")
+
+    return n_eff[0]
 
     
