@@ -16,13 +16,14 @@ update_changelog:
     - apk add --no-cache --upgrade bash
     
   script:
+    - chmod -x scripts/bump_changelog.sh
     - bash scripts/bump_changelog.sh
 
     # 2. Add the modified file
     - git add CHANGELOG.md
 
     # 3. Commit the change
-    - git commit -m "ci: Update CHANGELOG.md [skip ci]"
+    - 'git commit -m "ci: Update CHANGELOG.md [skip ci]"'
 
     # 4. Push to the repository
     - git push origin HEAD:${CI_COMMIT_REF_NAME}
