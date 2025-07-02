@@ -28,10 +28,10 @@ update_changelog:
         echo "✅ No changes to CHANGELOG.md. Nothing to commit."
       else
         echo "📝 Changes detected. Committing and pushing..."
-        - git add CHANGELOG.md
+        git add CHANGELOG.md
         # CORRECTED LINE: Use a static, reliable commit message.
-        - 'git commit -m "ci: Update CHANGELOG.md [skip ci]"'
-        - git push origin HEAD:${CI_COMMIT_REF_NAME}
+        'git commit -m "ci: Update CHANGELOG.md [skip ci]"'
+        git push origin HEAD:${CI_COMMIT_REF_NAME}
         echo "🚀 Changelog pushed to repository."
       fi
       
