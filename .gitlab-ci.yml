@@ -8,7 +8,7 @@ bump_changelog:
     - git config user.email "ci@example.com"
     - git config user.name "CI Bot"
     - git add CHANGELOG.md
-    - git commit -m "chore: bump changelog version"
+    - 'git commit -m "chore: bump changelog version"'
     - git push origin "$CI_COMMIT_REF_NAME"
   only:
     - main
