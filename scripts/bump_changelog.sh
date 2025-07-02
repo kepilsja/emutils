@@ -18,7 +18,9 @@ if [ -z "$LATEST" ]; then
   exit 1
 fi
 
-IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST"
+IFS='.'
+set -- $LATEST
+MAJOR=$1; MINOR=$2; PATCH=$3
 
 case "$TYPE" in
   major)
