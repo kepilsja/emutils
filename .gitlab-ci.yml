@@ -15,17 +15,25 @@ update_changelog:
     - git remote set-url origin "https://${DEPLOY_USER}:${DEPLOY_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
     
   script:
+    - ls -lR
     - echo "✅ Starting changelog update..."
     # Run your script to modify the CHANGELOG.md file
     - echo "Setting execute permission on script..."
     - chmod +x scripts/bump_changelog.sh
     - sh scripts/bump_changelog.sh
-
-    - git add CHANGELOG.md
-    # CORRECTED LINE: Use a static, reliable commit message.
-    - git commit -m "ci: Update CHANGELOG.md [skip ci]"
-    - git push origin HEAD:${CI_COMMIT_REF_NAME}
-    - echo "🚀 Changelog pushed to repository."
+    
+    # Check if the script actually made a change
+    - |
+      if git diff --quiet CHANGELOG.md; then
+        echo "✅ No changes to CHANGELOG.md. Nothing to commit."
+      else
+        echo "📝 Changes detected. Committing and pushing..."
+        git add CHANGELOG.md
+        # CORRECTED LINE: Use a static, reliable commit message.
+        'git commit -m "ci: Update CHANGELOG.md [skip ci]"'
+        git push origin HEAD:${CI_COMMIT_REF_NAME}
+        echo "🚀 Changelog pushed to repository."
+      fi
       
   # Control when this job runs. For example, only on the 'main' branch.
   rules:
