@@ -9,7 +9,9 @@ MINOR – New features, but backward-compatible
 
 PATCH – Bug fixes, small improvements
 
-## [Unreleased] - patch
+## [Unreleased] - TYPE
+
+## [1.0.2] - 2025-07-02
 ### Added
 - CI pipeline
 
