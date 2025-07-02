@@ -12,7 +12,7 @@ update_changelog:
     - git config --global user.name "GitLab CI Bot"
     - git config --global user.email "gitlab-ci-bot@your.domain.com"
     # Set up the remote URL with the deploy token for authentication
-    - git remote set-url origin "https://${DEPLOY_USER}:${DEPLOY_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git remote set-url origin "http://${DEPLOY_USER}:${DEPLOY_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
     - apk add --no-cache --upgrade bash
     
   script:
