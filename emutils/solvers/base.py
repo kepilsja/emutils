@@ -1,21 +1,28 @@
 from abc import ABC, abstractmethod
 
-class EigenSolverInterface(ABC):
+class Simulation(ABC):
     @abstractmethod
-    def get_effective_indices(self) -> list: pass
+    def set_geometry(self, geometry): pass
 
     @abstractmethod
-    def get_mode_field(self, mode_index=0): pass
+    def set_materials(self, materials): pass
 
     @abstractmethod
-    def update_parameter(self, key: str, value): pass
-
-    @abstractmethod
-    def solve(self): pass
+    def run(self): pass
 
     @abstractmethod
     def export_results(self, path: str): pass
 
     @abstractmethod
-    def summary(self) -> str: pass
+    def summary(self): pass
 
+class EigenSolverInterface(Simulation):
+    @abstractmethod
+    def get_effective_indices(self): pass
+
+    @abstractmethod
+    def get_mode_field(self, mode_index=0): pass
+
+class WGModel:
+    def __init__(self, model: Simulation):
+        self.model = model
