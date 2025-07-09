@@ -178,3 +178,6 @@ TODO*
 *playground.ipynb
 ngs/
 .vscode/
+misc/
+.gitmessage.txt
+commit-message
