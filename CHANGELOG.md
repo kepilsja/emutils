@@ -9,9 +9,11 @@ MINOR – New features, but backward-compatible
 
 PATCH – Bug fixes, small improvements
 
-## [Unreleased] - patch
+## [Unreleased] - minor
 ### Added
-- CI pipeline
+- `math_funcs.py` where useful mathematical funtions are going to be defied, now `gaussian` added
+- functions for loading lumerical projection data from MODE eigensolver, plotting projections and calculating aperture
+- tests functions in farfield.py    
 
 ## [1.0.1] - 2025-07-02
 ### Added
