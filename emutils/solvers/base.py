@@ -23,6 +23,12 @@ class EigenSolverInterface(Simulation):
     @abstractmethod
     def get_mode_field(self, mode_index=0): pass
 
+    @abstractmethod
+    def get_mode_farfield(self, mode_index=0): pass
+
+    @abstractmethod
+    def export_mode_farfield(self, filename, mode_index=0): pass
+
 class WGModel:
     def __init__(self, model: Simulation):
         self.model = model
