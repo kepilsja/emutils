@@ -32,6 +32,15 @@ class TestFarfieldDataLoading(unittest.TestCase):
         self.assertTrue(np.array_equal(uy_txt, uy_mat)) # type: ignore
         self.assertTrue((data_txt-data_mat<1e-20).all())
 
+    def test_h5_float_dataset_loading(self):
+        h5_file_path = Path('./tests/test_data/farfield_exported_test.h5')
+        ref_file_path = Path('./tests/test_data/farfield_float_array.dat')
+
+        _, _, data_h5 = farfield.load_data(h5_file_path)
+        data_ref = np.loadtxt(ref_file_path)
+
+        self.assertTrue(np.array_equal(data_h5, data_ref))
+
 
 class TestApertureFunction(unittest.TestCase):
     """
