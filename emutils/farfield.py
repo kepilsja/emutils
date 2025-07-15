@@ -58,7 +58,7 @@ def _load_dataset_file(file_path: Path):
     
     return ux, uy, farfield_data
 
-def load_data(file_path: Path):
+def load_data(file_path: Union[str, Path]):
     """
     Loads data (ux, uy, farfield_data) from a file.
 
@@ -73,6 +73,7 @@ def load_data(file_path: Path):
         FileNotFoundError: If the file does not exist.
         IOError: For other issues during file loading (e.g., parsing errors).
     """
+    file_path = Path(file_path)
     if not file_path.exists():
         raise FileNotFoundError(f"Error: The file at '{file_path}' was not found.")
     
@@ -119,7 +120,6 @@ def load_mode_farfield_projection_data(file_path: Union[Path, str]):
     farfield_data: np.ndarray
         Numpy array with farfield projection data
     '''
-    file_path = Path(file_path)
     ux, uy, farfield_data = load_data(file_path)
     r, theta = cartesian2polar(ux, uy)
 
