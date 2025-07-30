@@ -135,13 +135,15 @@ def fit_gaussian(x_data, y_data, **kwargs):
     popt, _ = curve_fit(gaussian, x_data, y_data, p0)
     return popt
 
-def aperture(x_data: Iterable, y_data: Iterable, threshold: Union[str, float]='esqr') -> Dict:
+def aperture(x_data: Iterable, y_data: Iterable, threshold: Union[str, float]='esqr', **kwargs) -> Dict:
     '''
     thershold: str or float
         Threshold value used to calculate parameters. Use "e" for 1/e factor,
         "esqr" for 1/e^2 factor or float in range (0, 1).
+        
+    kwargs accepted by scipy.optimize.curve_fit function
      '''
-    A_fit, x0_fit, sigma_fit = fit_gaussian(x_data, y_data)
+    A_fit, x0_fit, sigma_fit = fit_gaussian(x_data, y_data, **kwargs)
 
     if isinstance(threshold, str) and threshold in ('e', 'esqr'):
         delta_x = np.sqrt(2) * sigma_fit if threshold=='e' else 2 * sigma_fit
