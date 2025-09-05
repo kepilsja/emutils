@@ -181,3 +181,5 @@ ngs/
 misc/
 .gitmessage.txt
 commit-message
+playground*
+temp/
