@@ -77,7 +77,7 @@ class ModelGeometry:
     def __post_init__(self):
         self._validate()
 
-    def __setattr__(self, key, value):
+    def __setattr__(self, key, value): # TODO: How to validate on parameter change?
         super().__setattr__(key, value)
         if key != "_callback" and hasattr(self, "_callback") and self._callback:
             self._callback(key, value)
@@ -144,7 +144,8 @@ class GratingCoupler(LumerMODE):
         layers_stack (Dict[str, Tuple[str, float]], optional):
             Defines the material layers from bottom to top. Each entry is a
             tuple of (material_name, thickness_in_meters). Defaults to a
-            standard SOI stack.
+            standard SOI stack. Must include layers named `substrate`, `core`
+            and `cladding`.
         grating_shape (Tuple[float, ...], optional):
             A sequence of floats defining the consecutive heights of the core
             layer within a single grating period. Defaults to (150*nm, 220*nm).
@@ -201,7 +202,7 @@ class GratingCoupler(LumerMODE):
                 box=('SiO2 (Glass) - Palik', 2.0*um),
                 core=('Si (Silicon) - Palik', 220*nm),
                 oxide_cladding=('SiO2 (Glass) - Palik', 2.0*um),
-                cladding=('etch', 2.0*um)
+                cladding=('air', 2.0*um)
             ),
             grating_shape=(150*nm, 220*nm),
             pitch=660*nm,
@@ -209,20 +210,20 @@ class GratingCoupler(LumerMODE):
             n_segments=25,
             input_wg_length=8*um,
             polarization='te',
-            configuration='out',
+            configuration='in',
             theta=20,
             source_wl_range=(1450*nm, 1650*nm),
             filename:Union[str, Path]=None,
             **kwargs
         ):
         if LumerMODE is object:
-            err_msg = "Optional dependency 'lumapi' required to use this functionality!"
+            err_msg = "Module 'lumapi' is required to use this functionality!"
             logger.error(err_msg)
             raise ImportError(err)
         
         super().__init__(**kwargs)
         
-        self._Z_SPAN = 20*um
+        self._Z_SPAN = 50*um
         self._BUFFER = 2*um
         self._FREQ_POINTS = 81
         self._BEAM_WAIST_RADIUS = 10*um
@@ -243,7 +244,8 @@ class GratingCoupler(LumerMODE):
         self._initialize_objects()
 
     def _on_param_change(self, name, value):
-        logger.info(f"Parameter '{name}' changed to {value}. Reinitializing geometry...")
+        # logger.info(f"Parameter '{name}' changed to {value}. Reinitializing geometry...")
+        self._IS_INITIALIZED = False
         self._initialize_objects()
 
     @property
@@ -372,7 +374,7 @@ class GratingCoupler(LumerMODE):
         ys = np.cumsum(y_spans) - y_spans/2
         adjust_next_layer_thickess = False
         for layer, y, thickness in zip(self.geom.layers_stack, ys, y_spans):
-            if layer=='core' or self.geom.layers_stack[layer][0]=='air':
+            if layer=='core':
                 self.y_core = y
                 adjust_next_layer_thickess = True
                 continue
@@ -380,6 +382,8 @@ class GratingCoupler(LumerMODE):
                 thickness += self.geom.layers_stack['core'][1]
                 y -= self.geom.layers_stack['core'][1]/2
                 adjust_next_layer_thickess = False
+            if self.geom.layers_stack[layer][0]=='air':
+                continue
             self.addrect(
                 name=layer,
                 material=self.geom.layers_stack[layer][0],
@@ -546,8 +550,8 @@ class GratingCoupler(LumerMODE):
 
         Returns:
             dict: A dictionary containing the following keys:
-                - 'wavelengths': np.ndarray of wavelengths (in meters)
-                - 'frequencies': np.ndarray of corresponding frequencies (in Hz)
+                - 'wavelength': np.ndarray of wavelengths (in meters)
+                - 'frequency': np.ndarray of corresponding frequencies (in Hz)
                 - 'transmission': np.ndarray of absolute transmission values
                 - 'peak': dict with keys:
                     - 'max_transmission': float, maximum transmission value
@@ -569,15 +573,15 @@ class GratingCoupler(LumerMODE):
         if results is None or 'lambda' not in results or 'T' not in results:
             raise RuntimeError("Result does not contain expected data.")
 
-        wavelengths = np.squeeze(results['lambda'])  # in meters
-        frequencies = np.squeeze(results['f'])
+        wavelength = np.squeeze(results['lambda'])  # in meters
+        frequency = np.squeeze(results['f'])
         transmission = np.abs(np.squeeze(results['T']))
 
         # Peak transmission info
         max_idx = np.argmax(transmission)
         max_transmission = transmission[max_idx]
-        peak_wavelength = wavelengths[max_idx]
-        peak_frequency = frequencies[max_idx]
+        peak_wavelength = wavelength[max_idx]
+        peak_frequency = frequency[max_idx]
 
         # --- Fit Gaussian or Lorentzian to the transmission spectrum ---
 
@@ -596,7 +600,7 @@ class GratingCoupler(LumerMODE):
             return None
 
         # Normalize for fitting
-        xdata = wavelengths
+        xdata = wavelength
         ydata = transmission
         try:
             popt, _ = curve_fit(gaussian, xdata, ydata,
@@ -609,8 +613,8 @@ class GratingCoupler(LumerMODE):
             bandwidth_3dB = None
 
         return {
-            'wavelengths': wavelengths,
-            'frequencies': frequencies,
+            'wavelength': wavelength,
+            'frequency': frequency,
             'transmission': transmission,
             'peak': {
                 'max_transmission': max_transmission,
