@@ -43,19 +43,22 @@ def _load_txt_file(file_path: Path):
     return ux, uy, farfield_data.T
     
 
-def _load_mat_file(file_path: Path):
+def _load_dataset_file(file_path: Path):
     '''
-    Loads Lumerical mode far field projection data exported in matlab .mat format.
+    Loads Lumerical mode far field projection data exported in .mat/.h5 format.
     '''
     with h5py.File(file_path) as f:
-        ux = np.rad2deg(np.arcsin(f['ux'][:])).squeeze() # type: ignore
-        uy = np.rad2deg(np.arcsin(f['uy'][:])).squeeze() # type: ignore
+        ux = np.rad2deg(np.arcsin(f['ux'][:])).squeeze()                        # type: ignore
+        uy = np.rad2deg(np.arcsin(f['uy'][:])).squeeze()                        # type: ignore
         key = [s for s in str(f.keys()).split("'") if s.startswith('farfield')][0]
-        farfield_data = f[key][:]['real'].squeeze() + 1j*f[key][:]['imag'].squeeze() # type:ignore
+        if f[key][:].dtype == ux.dtype:                                         # type: ignore
+            farfield_data = f[key][:]                                           # type: ignore
+        else:
+            farfield_data = f[key][:]['real'].squeeze() + 1j*f[key][:]['imag'].squeeze() # type:ignore
     
     return ux, uy, farfield_data
 
-def load_data(file_path: Path):
+def load_data(file_path: Union[str, Path]):
     """
     Loads data (ux, uy, farfield_data) from a file.
 
@@ -70,12 +73,14 @@ def load_data(file_path: Path):
         FileNotFoundError: If the file does not exist.
         IOError: For other issues during file loading (e.g., parsing errors).
     """
+    file_path = Path(file_path)
     if not file_path.exists():
         raise FileNotFoundError(f"Error: The file at '{file_path}' was not found.")
     
     supported_loaders = {
         '.txt': _load_txt_file,
-        '.mat': _load_mat_file
+        '.mat': _load_dataset_file,
+        '.h5': _load_dataset_file,
     }
 
     if file_path.suffix not in supported_loaders:
@@ -115,7 +120,6 @@ def load_mode_farfield_projection_data(file_path: Union[Path, str]):
     farfield_data: np.ndarray
         Numpy array with farfield projection data
     '''
-    file_path = Path(file_path)
     ux, uy, farfield_data = load_data(file_path)
     r, theta = cartesian2polar(ux, uy)
 
@@ -131,13 +135,15 @@ def fit_gaussian(x_data, y_data, **kwargs):
     popt, _ = curve_fit(gaussian, x_data, y_data, p0)
     return popt
 
-def aperture(x_data: Iterable, y_data: Iterable, threshold: Union[str, float]='esqr') -> Dict:
+def aperture(x_data: Iterable, y_data: Iterable, threshold: Union[str, float]='esqr', **kwargs) -> Dict:
     '''
     thershold: str or float
         Threshold value used to calculate parameters. Use "e" for 1/e factor,
         "esqr" for 1/e^2 factor or float in range (0, 1).
+        
+    kwargs accepted by scipy.optimize.curve_fit function
      '''
-    A_fit, x0_fit, sigma_fit = fit_gaussian(x_data, y_data)
+    A_fit, x0_fit, sigma_fit = fit_gaussian(x_data, y_data, **kwargs)
 
     if isinstance(threshold, str) and threshold in ('e', 'esqr'):
         delta_x = np.sqrt(2) * sigma_fit if threshold=='e' else 2 * sigma_fit
