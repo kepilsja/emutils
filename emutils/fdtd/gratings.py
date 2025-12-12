@@ -32,7 +32,7 @@ except ImportError as err:
 
 
 @dataclass
-class ModelGeometry:
+class GratingGeometry:
     """
     Represents the geometry of a photonic grating coupler.
 
@@ -219,7 +219,7 @@ class GratingCoupler(LumerMODE):
         if LumerMODE is object:
             err_msg = "Module 'lumapi' is required to use this functionality!"
             logger.error(err_msg)
-            raise ImportError(err)
+            raise ImportError(err_msg)
         
         super().__init__(**kwargs)
         
@@ -235,7 +235,7 @@ class GratingCoupler(LumerMODE):
         self.source_wl_range = source_wl_range
 
         # Instantiate ModelParameters with callback
-        self.geom = ModelGeometry(
+        self.geom = GratingGeometry(
             layers_stack, grating_shape, pitch, duty_cycle, n_segments, input_wg_length,
             _callback=self._on_param_change,
         )
@@ -435,7 +435,7 @@ class GratingCoupler(LumerMODE):
                 x_min = x_max
         x_max += self._BUFFER
         self.addrect(
-            name=f'remaining core',
+            name='remaining core',
             material=core_material,
             x_min=x_min,
             x_max=x_max,
