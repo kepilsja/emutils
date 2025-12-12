@@ -1,8 +1,8 @@
 from .base import EigenSolverInterface
-from ..lumapi_loader import setup_lumapi
+from ..lumapi_loader import add_lumapi_to_path
 
 try:
-    setup_lumapi()
+    add_lumapi_to_path()
 
     import lumapi # type: ignore
 

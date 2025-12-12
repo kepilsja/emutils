@@ -38,7 +38,7 @@ def find_lumapi_path_recursive(start_dirs=None, max_depth=4):
     return None
 
 
-def add_lumapi_to_path(lumapi_path):
+def add_lumapi_to_path(lumapi_path=None):
     if any("lumapi" in str(p) for p in sys.path):
         return
 
