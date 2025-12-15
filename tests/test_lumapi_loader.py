@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import emutils.lumapi_loader as loader
+import emutils.lumer.lumapi_loader as loader
 
 class TestLumapiLoader(unittest.TestCase):
 

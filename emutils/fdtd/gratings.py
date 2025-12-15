@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from scipy.optimize import curve_fit
 
-from ..lumapi_loader import add_lumapi_to_path
+from ..lumer.lumapi_loader import add_lumapi_to_path
 
 logger = logging.getLogger(__name__)
 

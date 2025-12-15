@@ -1,5 +1,5 @@
 from .base import EigenSolverInterface
-from ..lumapi_loader import add_lumapi_to_path
+from ..lumer.lumapi_loader import add_lumapi_to_path
 
 try:
     add_lumapi_to_path()
