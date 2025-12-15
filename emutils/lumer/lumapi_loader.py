@@ -2,7 +2,8 @@ from pathlib import Path
 import sys
 import os
 import re
-
+import logging, warnings
+logging.captureWarnings(True)
 
 def find_lumapi_path_recursive(start_dirs=None, max_depth=4):
     """
@@ -55,6 +56,6 @@ def add_lumapi_to_path(lumapi_path=None):
     if lumapi_path:
         sys.path.append(str(lumapi_path))
     else:
-        raise ImportError(
+        warnings.warn(
             "Could not find 'lumapi'. Please specify lumapi path manually."
         )
