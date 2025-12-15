@@ -180,6 +180,6 @@ ngs/
 .vscode/
 misc/
 .gitmessage.txt
-commit-message
+commit-message.*
 playground*
 temp/
