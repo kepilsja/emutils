@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from scipy.optimize import curve_fit
 
-from ..lumapi_loader import setup_lumapi
+from ..lumapi_loader import add_lumapi_to_path
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ um = 1e-6
 nm = 1e-9
 
 try:
-    setup_lumapi()
+    add_lumapi_to_path()
     import lumapi
     from lumapi import MODE as LumerMODE
 
