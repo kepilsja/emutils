@@ -1,0 +1,35 @@
+stages:
+  - release
+
+update_changelog:
+  stage: release
+  image: alpine:latest
+  
+  # This section configures Git and runs your script
+  before_script:
+    - apk add --no-cache git # Install Git in the container
+    # Configure Git with a user name and email
+    - git config --global user.name "GitLab CI Bot"
+    - git config --global user.email "gitlab-ci-bot@your.domain.com"
+    # Set up the remote URL with the deploy token for authentication
+    - git remote set-url origin "http://${DEPLOY_USER}:${DEPLOY_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    
+  script:
+    - echo "✅ Starting changelog update..."
+    # Run your script to modify the CHANGELOG.md file
+    - echo "Setting execute permission on script..."
+    - chmod +x scripts/bump_changelog.sh
+    - sh scripts/bump_changelog.sh
+    - echo "📝 Changes detected. Committing and pushing..."
+    # Add the changed file to the staging area
+    - git add CHANGELOG.md
+    # Commit the file. The [skip ci] is CRITICAL to prevent an infinite pipeline loop.
+    - 'git commit -m "ci: Update CHANGELOG.md for new version [skip ci]"'
+    # Push the commit to the same branch the job is running on
+    - git push origin HEAD:${CI_COMMIT_REF_NAME}
+    - echo "🚀 Changelog pushed to repository."
+
+      
+  # Control when this job runs. For example, only on the 'main' branch.
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'

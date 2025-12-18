@@ -1,41 +1,32 @@
 from .base import EigenSolverInterface
-from ..lumer.lumapi_loader import add_lumapi_to_path
+from ..lumapi_loader import setup_lumapi
 
 try:
-    add_lumapi_to_path()
+    setup_lumapi()
 
     import lumapi # type: ignore
 
     class LumericalModel(lumapi.MODE, EigenSolverInterface):
         def set_geometry(self, geometry):
-            pass
+            raise NotImplementedError()
 
         def set_materials(self, materials):
-            pass
+            raise NotImplementedError()
 
         def run(self):
             super().findmodes()
 
         def export_results(self, path: str):
-            pass
+            raise NotImplementedError
 
         def summary(self):
-            pass
+            raise NotImplementedError
 
         def get_effective_indices(self):
-            pass
+            raise NotImplementedError
 
-        def get_mode_field(self, mode_index=0, component='e2'): 
-            mode = f'mode{mode_index}'
-            if component == 'e2':
-                field = self.getelectric(mode)
-            elif component == 'h2':
-                field = self.getmagnetic(mode)
-            elif component.isalpha():
-                field = self.getdata(mode, component.capitalize())
-            else:
-                raise ValueError(f'Unknown component "{component}"')
-            return field
+        def get_mode_field(self, mode_index=0): 
+            raise NotImplementedError
         
         def get_mode_farfield(self, mode_index=1, resolution=(300,300),
                             ambient_index=1.0): 

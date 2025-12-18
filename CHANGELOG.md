@@ -1,0 +1,32 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## Versioning semantic
+MAJOR – Breaking changes
+
+MINOR – New features, but backward-compatible
+
+PATCH – Bug fixes, small improvements
+
+## [Unreleased] - TYPE
+
+## [1.1.0] - 2025-07-09
+### Added
+- `math_funcs.py` where useful mathematical funtions are going to be defied, now `gaussian` added
+- functions for loading lumerical projection data from MODE eigensolver, plotting projections and calculating aperture
+- tests functions in farfield.py    
+
+## [1.0.1] - 2025-07-02
+### Added
+- Docstrings with source of material dispersion formulas and input validation for material.py
+- Template files abstract interface class for numerical solvers
+- Tool for far-field numerical aperture estimation
+- Folder for future visualization tools
+
+### Fixed
+- `eim_rib` function raising `IndexError: list index out of range` when no slab modes found, now it raises `ValueError` with adquate communicate if `solve_1d_analytic` returns empty list, if not then first element of the returned list is taken for further calculations or is returned
+
+## [1.0.0] - 2025-02-19
+### Added
+- Initial release with core EIM functionality.

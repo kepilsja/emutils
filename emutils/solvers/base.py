@@ -2,48 +2,32 @@ from abc import ABC, abstractmethod
 
 class Simulation(ABC):
     @abstractmethod
-    def set_geometry(self, geometry):
-        raise NotImplementedError()
+    def set_geometry(self, geometry): pass
 
     @abstractmethod
-    def set_materials(self, materials):
-        raise NotImplementedError()
+    def set_materials(self, materials): pass
 
     @abstractmethod
-    def run(self):
-        raise NotImplementedError()
+    def run(self): pass
 
     @abstractmethod
-    def export_results(self, path: str):
-        raise NotImplementedError()
+    def export_results(self, path: str): pass
 
     @abstractmethod
-    def summary(self):
-        raise NotImplementedError()
+    def summary(self): pass
 
 class EigenSolverInterface(Simulation):
-    def _is_component_valid(self, component):
-        if not isinstance(component, str):
-            raise TypeError(f'Invalid typ of "component", expected string, got {type(component)}')
-        valid_components = ('ex', 'ey', 'ez', 'e2',
-                            'hx', 'hy', 'hz', 'h2')
-        return True if component in valid_components else False
+    @abstractmethod
+    def get_effective_indices(self): pass
 
     @abstractmethod
-    def get_effective_indices(self):
-        raise NotImplementedError()
+    def get_mode_field(self, mode_index=0): pass
 
     @abstractmethod
-    def get_mode_field(self, mode_index=0, component='e2'):
-        raise NotImplementedError()
+    def get_mode_farfield(self, mode_index=0): pass
 
     @abstractmethod
-    def get_mode_farfield(self, mode_index=0):
-        raise NotImplementedError()
-
-    @abstractmethod
-    def export_mode_farfield(self, filename, mode_index=0):
-        raise NotImplementedError()
+    def export_mode_farfield(self, filename, mode_index=0): pass
 
 class WGModel:
     def __init__(self, model: Simulation):
