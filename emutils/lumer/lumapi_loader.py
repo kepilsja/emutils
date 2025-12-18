@@ -2,6 +2,8 @@ from pathlib import Path
 import sys
 import os
 import re
+import logging, warnings
+logging.captureWarnings(True)
 
 def find_lumapi_path_recursive(start_dirs=None, max_depth=4):
     """
@@ -9,7 +11,7 @@ def find_lumapi_path_recursive(start_dirs=None, max_depth=4):
     Returns the first valid path found.
     """
     if start_dirs is None:
-        if os.name == 'nt':
+        if os.name == "nt":
             # Windows defaults
             start_dirs = [Path("C:/Program Files"), Path("C:/Program Files (x86)")]
         else:
@@ -36,7 +38,8 @@ def find_lumapi_path_recursive(start_dirs=None, max_depth=4):
 
     return None
 
-def setup_lumapi():
+
+def add_lumapi_to_path(lumapi_path=None):
     if any("lumapi" in str(p) for p in sys.path):
         return
 
@@ -49,11 +52,10 @@ def setup_lumapi():
             return
 
     # Try to find lumapi path
-    lumapi_path = find_lumapi_path_recursive()
+    lumapi_path = lumapi_path or find_lumapi_path_recursive()
     if lumapi_path:
         sys.path.append(str(lumapi_path))
     else:
-        raise ImportError(
-            "Could not find 'lumapi'. Please set the LUMAPI_PATH environment variable "
-            "or ensure Lumerical is installed in a standard location."
+        warnings.warn(
+            "Could not find 'lumapi'. Please specify lumapi path manually."
         )

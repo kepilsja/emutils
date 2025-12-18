@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import emutils.lumapi_loader as loader
+import emutils.lumer.lumapi_loader as loader
 
 class TestLumapiLoader(unittest.TestCase):
 
@@ -23,14 +23,14 @@ class TestLumapiLoader(unittest.TestCase):
 
         with mock.patch.object(Path, "exists", return_value=True), \
              mock.patch.object(sys, "path", []):
-            loader.setup_lumapi()
+            loader.add_lumapi_to_path()
             self.assertIn(str(fake_path), sys.path[0])
 
     def test_already_in_sys_path(self):
         sys.path = ["C:/Program Files/Lumerical/v250/api/python"]
 
         # Should not modify sys.path or raise anything
-        loader.setup_lumapi()
+        loader.add_lumapi_to_path()
         self.assertIn("C:/Program Files/Lumerical/v250/api/python", sys.path)
 
     def test_find_lumapi_path_recursive_success(self):
@@ -52,7 +52,7 @@ class TestLumapiLoader(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True), \
              mock.patch.object(loader, "find_lumapi_path_recursive", return_value=found_path), \
              mock.patch.object(sys, "path", []):
-            loader.setup_lumapi()
+            loader.add_lumapi_to_path()
             self.assertIn(str(found_path), sys.path)
 
     def test_setup_lumapi_fallback_search_failure(self):
@@ -60,7 +60,7 @@ class TestLumapiLoader(unittest.TestCase):
              mock.patch.object(loader, "find_lumapi_path_recursive", return_value=None), \
              mock.patch.object(sys, "path", []):
             with self.assertRaises(ImportError):
-                loader.setup_lumapi()
+                loader.add_lumapi_to_path()
 
 
 if __name__ == "__main__":
