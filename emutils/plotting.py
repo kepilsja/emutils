@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from pandas.api.types import is_integer_dtype, is_string_dtype
+import matplotlib.ticker as ticker
 
 def _white_to_blue_hue(value: float) -> str:
     """
@@ -26,11 +27,9 @@ def parallel_coordinates_plot(
     n_rows, n_params = data.shape
     xticks = np.linspace(0, 1, n_params)
     xticklabels = data.columns
-    yticks_norm = np.linspace(0, 1, 6)
 
     fig, ax = plt.subplots(figsize=(n_params / 0.7, 4))
     
-    # Hide all default spines
     ax.spines[['top', 'bottom', 'left', 'right']].set_visible(False)
     ax.set_xlim(-0.05, 1.05)
     ax.set_ylim(-0.01, 1.01)
@@ -38,11 +37,10 @@ def parallel_coordinates_plot(
     ax.set_xticks(xticks)
     ax.set_xticklabels(xticklabels)
     
-    # Remove default y-ticks completely to prevent overlap
     ax.set_yticks([]) 
     ax.tick_params('x', length=0)
 
-    # Normalize data and capture column metadata for axis drawing
+    # 1. Normalize data and capture column metadata for axis drawing
     data_normalized = pd.DataFrame(index=data.index)
     col_info = {}
 
@@ -65,23 +63,33 @@ def parallel_coordinates_plot(
             
         # Handle Numerics
         else:
+            is_int = is_integer_dtype(series)
             min_val, max_val = series.min(), series.max()
             
             if i == n_params - 1 and metric_range:
-                min_val, max_val = metric_range
+                # If metric range is explicitly provided, respect it exactly
+                nice_min, nice_max = metric_range
+                nice_ticks = np.linspace(nice_min, nice_max, 6)
+            else:
+                # Ask matplotlib for ~5 "pretty" ticks spanning the min/max
+                locator = ticker.MaxNLocator(nbins=5, integer=is_int)
+                nice_ticks = locator.tick_values(min_val, max_val)
+                nice_min, nice_max = nice_ticks[0], nice_ticks[-1]
                 
-            if max_val == min_val:
+            if nice_max == nice_min:
                 data_normalized[col] = 0.5
             else:
-                data_normalized[col] = (series - min_val) / (max_val - min_val)
+                # Normalize the data against the new PRETTY limits, not the exact max/min
+                data_normalized[col] = (series - nice_min) / (nice_max - nice_min)
                 
             col_info[col] = {
-                'type': 'int' if is_integer_dtype(series) else 'float',
-                'min': min_val,
-                'max': max_val
+                'type': 'int' if is_int else 'float',
+                'ticks': nice_ticks,
+                'min': nice_min,
+                'max': nice_max
             }
 
-    # Draw lines sorted by the final metric
+    # 2. Draw lines sorted by the final metric
     hue = data_normalized.iloc[:, -1]
     sorted_indices = data_normalized.sort_values(data.columns[-1]).index
 
@@ -94,7 +102,7 @@ def parallel_coordinates_plot(
     if highlight_best:
         ax.plot(xticks, data_normalized.loc[sorted_indices[-1]], color='tab:red')
 
-    # Draw vertical axes and apply custom tick labels
+    # 3. Draw vertical axes and apply custom tick labels
     ax.vlines(xticks, 0, 1, color='k', lw=1)
 
     for i, (x, col) in enumerate(zip(xticks, data.columns)):
@@ -111,10 +119,15 @@ def parallel_coordinates_plot(
                 ax.text(x - 0.016, y, str(label), va='center', ha='right')
                 
         else:
-            min_val, max_val = info['min'], info['max']
-            ax.hlines(yticks_norm, x - 0.01, x, color='k', lw=1)
+            nice_ticks = info['ticks']
+            nice_min, nice_max = info['min'], info['max']
             
-            labels = yticks_norm * (max_val - min_val) + min_val
+            # Map the true tick values back to their 0-1 normalized Y positions
+            tick_pos = (nice_ticks - nice_min) / (nice_max - nice_min)
+            
+            ax.hlines(tick_pos, x - 0.01, x, color='k', lw=1)
+            
+            labels = nice_ticks.copy()
             
             max_abs = np.max(np.abs(labels))
             max_exponent = np.floor(np.log10(max_abs)) if max_abs > 0 else 0
@@ -125,11 +138,13 @@ def parallel_coordinates_plot(
                 labels /= 10**eng_exponent
                 ax.text(x, 1.03, rf"$\times 10^{{{eng_exponent}}}$", va='bottom', ha='center')
                 
-            for y, label in zip(yticks_norm, labels):
-                if info['type'] == 'int' and eng_exponent == 0:
-                    label_str = f"{int(round(label))}"
+            for y, label in zip(tick_pos, labels):
+                # Format to strip trailing .000s for a much cleaner axis
+                if np.isclose(label, np.round(label)):
+                    label_str = f"{int(np.round(label))}"
                 else:
-                    label_str = f"{label:.3f}"
+                    # Keep decimals for floats, but remove unnecessary trailing zeros
+                    label_str = f"{label:.3f}".rstrip('0').rstrip('.')
                     
                 ax.text(x - 0.016, y, label_str, va='center', ha='right')
 
