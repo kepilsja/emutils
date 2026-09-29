@@ -613,6 +613,7 @@ class GratingCoupler(LumerMODE):
                 y=self.source_loc[1],
                 angle_theta=-self._theta,
                 waist_radius_w0=self._BEAM_WAIST_RADIUS,
+                set_wavelength=True,
                 wavelength_start=self.source_wl_range[0],
                 wavelength_stop=self.source_wl_range[1],
             )
