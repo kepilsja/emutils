@@ -2,8 +2,8 @@ import os
 import logging
 import tempfile
 import atexit
-from dataclasses import dataclass, field
-from typing import Union, Tuple, Dict, Iterable, Callable
+from dataclasses import dataclass, field, fields
+from typing import Union, Tuple, Dict, Iterable, Callable, Optional, List
 import numbers
 from pathlib import Path
 
@@ -31,39 +31,63 @@ except ImportError as err:
     LumerMODE = object
 
 
+def _is_air(material):
+    return material.lower() == 'air'
+
+
 @dataclass
 class GratingGeometry:
     """
     Represents the geometry of a photonic grating coupler.
 
     Attributes:
-        layer_stack (Dict[str, Tuple[str, float]]): 
-            A dictionary mapping layer names to a tuple of (material_name, thickness in microns).
+        layers_stack (Dict[str, Tuple[str, float]]):
+            A dictionary mapping layer names to a tuple of (material_name, thickness in meters).
             Layers should be ordered from bottom to top! Must include 'core',
-            'substrate', and 'cladding' layers.
+            'substrate', and 'cladding' layers. Layers made of 'air' are not drawn
+            (background material is used instead).
 
-        grating_shape (Iterable[float]): 
-            A sequence of floats describing the grating segment consecutive core heights,
-            e.g. (1e-6, 0.5e-6) translates to grating section built from
-            segments with heights of 1 and 0.5 microns with lengths specified by
-            values of `pitch` and `duty_cycle` parameters
+        grating_shape (Iterable[float]):
+            A sequence of floats describing consecutive sections of a single grating
+            segment. Its meaning depends on `core_only`:
+            - core_only=True: remaining core height of each section measured from
+              the core bottom, e.g. (150e-9, 220e-9) for 70 nm shallow etch of 220 nm core.
+            - core_only=False: etch depth of each section measured down from the top
+              of the `etch_from` layer (0 means not etched). The etch may go through
+              any number of layers, e.g. through the top cladding and partially
+              into the core, or deep into the substrate.
 
-        pitch (float): 
-            The period of the grating (in microns).
+        pitch (float):
+            The period of the grating (in meters).
 
-        duty_cycle (Union[float, Iterable[float]]): 
+        duty_cycle (Union[float, Iterable[float]]):
             Ratio(s) defining the proportions of the segments lengths in coupler section.
-            If an iterable, must sum to 1 and match the number of sections 
+            If an iterable, must sum to 1 and match the number of sections
             in a single segment.
 
-        n_segments (int): 
+        n_segments (int):
             Number of segments in the grating. Must be greater than 1.
 
-        input_wg_length (float): 
+        input_wg_length (float):
             Length of the input waveguide before the grating. Must be positive.
 
+        core_only (bool):
+            If True (default) the grating is defined only in the core layer and the
+            trenches are filled with the material of the layer directly above the core.
+
+        etch_from (str, optional):
+            Only used if core_only=False. Name of the layer from whose top surface the
+            etch starts. Defaults to the topmost non-air layer.
+
+        fill_material (str, optional):
+            Only used if core_only=False. Material filling etched trenches. Defaults to
+            the material of the layer directly above `etch_from` ('air' if none).
+
     Notes:
-        - Automatically calls `_callback(key, value)` on attribute change (if `_callback` is set).
+        - Every attribute change is validated (and reverted if invalid) and then
+          `_callback(key, value)` is called (if `_callback` is set).
+        - Use `update(**kwargs)` to change several dependent attributes at once
+          (e.g. `grating_shape` together with `duty_cycle`).
     """
     layers_stack: Dict[str, Tuple[str, float]]
     grating_shape: Iterable[float]
@@ -71,16 +95,44 @@ class GratingGeometry:
     duty_cycle: Union[float, Iterable[float]]
     n_segments: int
     input_wg_length: float
+    core_only: bool = True
+    etch_from: Optional[str] = None
+    fill_material: Optional[str] = None
 
     _callback: Callable[[str, object], None] = field(default=None, repr=False, compare=False)
 
     def __post_init__(self):
         self._validate()
+        object.__setattr__(self, '_ready', True)
 
-    def __setattr__(self, key, value): # TODO: How to validate on parameter change?
-        super().__setattr__(key, value)
-        if key != "_callback" and hasattr(self, "_callback") and self._callback:
-            self._callback(key, value)
+    def __setattr__(self, key, value):
+        if key.startswith('_') or not self.__dict__.get('_ready'):
+            super().__setattr__(key, value)
+            return
+        self.update(**{key: value})
+
+    def update(self, **kwargs):
+        """Set several attributes at once, validate them together and trigger a single callback."""
+        field_names = {f.name for f in fields(self) if not f.name.startswith('_')}
+        unknown = kwargs.keys() - field_names
+        if unknown:
+            raise AttributeError(f"Unknown geometry parameters: {unknown}")
+
+        old = {key: getattr(self, key) for key in kwargs}
+        for key, value in kwargs.items():
+            object.__setattr__(self, key, value)
+        try:
+            self._validate()
+        except Exception:
+            for key, value in old.items():
+                object.__setattr__(self, key, value)
+            raise
+
+        if self._callback:
+            if len(kwargs) == 1:
+                self._callback(*next(iter(kwargs.items())))
+            else:
+                self._callback('update', kwargs)
 
     def _validate(self):
         required_layers = {'core', 'substrate', 'cladding'}
@@ -100,31 +152,161 @@ class GratingGeometry:
         if not isinstance(self.input_wg_length, numbers.Number) or self.input_wg_length <= 0:
             raise ValueError("input_wg_length must be a positive number.")
 
-        grating_shape_list = list(self.grating_shape)
-        for i, height in enumerate(grating_shape_list):
-            if not (0 <= height <= self.layers_stack['core'][1]):
-                raise ValueError(
-                    f"Grating height at grating_shape[{i}] = {height} must be non-negative "
-                    f"and less than core thickness ({self.layers_stack['core'][1]})."
-                )
+        if not isinstance(self.pitch, numbers.Number) or self.pitch <= 0:
+            raise ValueError("pitch must be a positive number.")
 
-        if isinstance(self.duty_cycle, Iterable):
-            duty_list = list(self.duty_cycle)
-            if len(duty_list) != len(grating_shape_list):
-                raise ValueError(
-                    f"duty_cycle must match length of grating_shape. "
-                    f"Got {len(duty_list)} and {len(grating_shape_list)}."
-                )
-            total = sum(duty_list)
-            if not abs(total - 1.0) < 1e-6:
-                raise ValueError(f"duty_cycle values must sum to 1, got {total}.")
-        elif isinstance(self.duty_cycle, numbers.Number):
+        self._validate_duty_cycle()
+        if self.core_only:
+            self._validate_core_only_shape()
+        else:
+            self._validate_etch_depths()
+
+    def _validate_duty_cycle(self):
+        if isinstance(self.duty_cycle, numbers.Number):
             if not (0.0 <= self.duty_cycle <= 1.0):
                 raise ValueError(f"duty_cycle value has to be number between 0 and 1, got {self.duty_cycle}")
-            super().__setattr__('duty_cycle', [self.duty_cycle, 1.0 - self.duty_cycle])
-            
+            object.__setattr__(self, 'duty_cycle', [self.duty_cycle, 1.0 - self.duty_cycle])
+        elif isinstance(self.duty_cycle, Iterable):
+            object.__setattr__(self, 'duty_cycle', list(self.duty_cycle))
+            total = sum(self.duty_cycle)
+            if not abs(total - 1.0) < 1e-6:
+                raise ValueError(f"duty_cycle values must sum to 1, got {total}.")
         else:
             raise TypeError("duty_cycle must be a float or an iterable of floats.")
+
+        n_sections = len(list(self.grating_shape))
+        if len(self.duty_cycle) != n_sections:
+            raise ValueError(
+                f"duty_cycle must match length of grating_shape. "
+                f"Got {len(self.duty_cycle)} and {n_sections}."
+            )
+
+    def _validate_core_only_shape(self):
+        core_thickness = self.layers_stack['core'][1]
+        for i, height in enumerate(self.grating_shape):
+            if not (0 <= height <= core_thickness):
+                raise ValueError(
+                    f"Grating height at grating_shape[{i}] = {height} must be non-negative "
+                    f"and less than core thickness ({core_thickness})."
+                )
+
+    def _validate_etch_depths(self):
+        if self.etch_from is not None and self.etch_from not in self.layers_stack:
+            raise ValueError(f"etch_from layer '{self.etch_from}' is not defined in layers_stack.")
+        if self.fill_material is not None and not isinstance(self.fill_material, str):
+            raise TypeError("fill_material must be a string.")
+
+        etch_from = self._etch_from_layer()
+        max_depth = self.layer_bounds()[etch_from][1]
+        for i, depth in enumerate(self.grating_shape):
+            if not (0 <= depth <= max_depth):
+                raise ValueError(
+                    f"Etch depth at grating_shape[{i}] = {depth} must be non-negative "
+                    f"and not exceed the stack thickness below top of '{etch_from}' ({max_depth})."
+                )
+
+    def _etch_from_layer(self):
+        if self.core_only:
+            return 'core'
+        if self.etch_from is not None:
+            return self.etch_from
+        non_air = [name for name, (material, _) in self.layers_stack.items() if not _is_air(material)]
+        return non_air[-1]
+
+    def layer_bounds(self, buffer=0.0):
+        """Returns {layer_name: (y_min, y_max)}, bottom and top layers are extended by `buffer`."""
+        bounds = {}
+        y = 0.0
+        last = len(self.layers_stack) - 1
+        for i, (name, (_, thickness)) in enumerate(self.layers_stack.items()):
+            thickness += buffer * ((i == 0) + (i == last))
+            bounds[name] = (y, y + thickness)
+            y += thickness
+        return bounds
+
+    def section_surfaces(self, buffer=0.0):
+        """
+        Returns (y_top, fill_material, surfaces) where y_top is the level from which
+        the etch starts, fill_material fills the trenches and surfaces[j] is the level
+        of the etched surface of j-th grating section.
+        """
+        etch_from = self._etch_from_layer()
+        names = list(self.layers_stack)
+        idx = names.index(etch_from)
+        y_top = self.layer_bounds(buffer)[etch_from][1]
+
+        if self.core_only:
+            fill = None
+            depths = [self.layers_stack['core'][1] - height for height in self.grating_shape]
+        else:
+            fill = self.fill_material
+            depths = list(self.grating_shape)
+        if fill is None:
+            fill = self.layers_stack[names[idx + 1]][0] if idx + 1 < len(names) else 'air'
+
+        return y_top, fill, [y_top - depth for depth in depths]
+
+
+@dataclass(frozen=True)
+class Rect:
+    name: str
+    material: str
+    x_min: float
+    x_max: float
+    y_min: float
+    y_max: float
+    in_grating: bool = False
+
+
+def build_rects(geom: GratingGeometry, buffer: float) -> List[Rect]:
+    """
+    Builds the list of non-overlapping rectangles representing the whole grating coupler
+    cross-section. Grating starts at x=0, input waveguide spans x < 0.
+    """
+    y_top, fill, surfaces = geom.section_surfaces(buffer)
+
+    # x-intervals as (label, x_min, x_max, surface level)
+    intervals = [('input', -buffer - geom.input_wg_length, 0.0, y_top)]
+    x = 0.0
+    for i in range(geom.n_segments):
+        for j, (ff, surface) in enumerate(zip(geom.duty_cycle, surfaces)):
+            if ff == 0:
+                continue
+            intervals.append((f'seg{i}_sec{j}', x, x + ff * geom.pitch, surface))
+            x += ff * geom.pitch
+    intervals.append(('tail', x, x + buffer, y_top))
+
+    rects = []
+    for name, (y_min, y_max) in geom.layer_bounds(buffer).items():
+        material = geom.layers_stack[name][0]
+        if _is_air(material):
+            continue
+        above_etch = y_min >= y_top
+        # merge consecutive intervals with equal clipped layer top
+        runs = []
+        for label, x0, x1, surface in intervals:
+            top = y_max if above_etch else min(y_max, surface)
+            if runs and np.isclose(runs[-1][3], top, rtol=0, atol=1e-15):
+                runs[-1][2] = x1
+                runs[-1][4] = label
+            else:
+                runs.append([label, x0, x1, top, label])
+        if len(runs) == 1:
+            _, x0, x1, top, _ = runs[0]
+            rects.append(Rect(name, material, x0, x1, y_min, top))
+            continue
+        for first, x0, x1, top, last in runs:
+            if top <= y_min:
+                continue
+            label = first if first == last else f'{first}-{last}'
+            rects.append(Rect(f'{name}_{label}', material, x0, x1, y_min, top, in_grating=True))
+
+    if not _is_air(fill):
+        for label, x0, x1, surface in intervals:
+            if surface < y_top:
+                rects.append(Rect(f'fill_{label}', fill, x0, x1, surface, y_top, in_grating=True))
+
+    return rects
 
 
 class GratingCoupler(LumerMODE):
@@ -147,8 +329,10 @@ class GratingCoupler(LumerMODE):
             standard SOI stack. Must include layers named `substrate`, `core`
             and `cladding`.
         grating_shape (Tuple[float, ...], optional):
-            A sequence of floats defining the consecutive heights of the core
-            layer within a single grating period. Defaults to (150*nm, 220*nm).
+            A sequence of floats defining consecutive sections of a single grating
+            period. With `core_only=True` these are remaining core heights, otherwise
+            etch depths measured from the top of `etch_from` layer.
+            Defaults to (150*nm, 220*nm).
         pitch (float, optional):
             The period of the grating in meters. Defaults to 660*nm.
         duty_cycle (Union[float, Iterable[float]], optional):
@@ -160,6 +344,16 @@ class GratingCoupler(LumerMODE):
         input_wg_length (float, optional):
             The length of the input waveguide before the grating region in meters.
             Defaults to 8*um.
+        core_only (bool, optional):
+            If True, the grating is defined only in the core layer. If False, the
+            grating is etched from the top of `etch_from` layer through any number
+            of layers below it. Defaults to True.
+        etch_from (str, optional):
+            Name of the layer the etch starts from (only with `core_only=False`).
+            Defaults to the topmost non-air layer.
+        fill_material (str, optional):
+            Material filling the etched trenches (only with `core_only=False`).
+            Defaults to the material of the layer directly above `etch_from`.
         polarization (str, optional):
             The polarization of the light, either 'te' or 'tm'. Defaults to 'te'.
         configuration (str, optional):
@@ -179,7 +373,7 @@ class GratingCoupler(LumerMODE):
             Additional keyword arguments passed to the parent `LumerMODE` class.
 
     Attributes:
-        geom (ModelGeometry): An object holding the validated geometric parameters.
+        geom (GratingGeometry): An object holding the validated geometric parameters.
             Changing attributes on this object will trigger a simulation re-build.
         solver (object): The Lumerical FDTD solver object.
         source (object): The Lumerical source object (ModeSource or GaussianSource).
@@ -209,6 +403,9 @@ class GratingCoupler(LumerMODE):
             duty_cycle=0.45,
             n_segments=25,
             input_wg_length=8*um,
+            core_only=True,
+            etch_from=None,
+            fill_material=None,
             polarization='te',
             configuration='in',
             theta=20,
@@ -237,6 +434,7 @@ class GratingCoupler(LumerMODE):
         # Instantiate ModelParameters with callback
         self.geom = GratingGeometry(
             layers_stack, grating_shape, pitch, duty_cycle, n_segments, input_wg_length,
+            core_only=core_only, etch_from=etch_from, fill_material=fill_material,
             _callback=self._on_param_change,
         )
 
@@ -266,11 +464,8 @@ class GratingCoupler(LumerMODE):
     
     @property
     def y_core(self):
-        return self._y_core
-    
-    @y_core.setter
-    def y_core(self, value):
-        self._y_core = value
+        y_min, y_max = self.geom.layer_bounds(self._BUFFER)['core']
+        return (y_min + y_max) / 2
 
     @property
     def source_loc(self):
@@ -367,84 +562,19 @@ class GratingCoupler(LumerMODE):
         self._IS_INITIALIZED = True
 
     def _create_geometry(self):
-        x_span = self.sx
-        y_spans = np.array([height for (_, height) in self.geom.layers_stack.values()])
-        y_spans[0] += self._BUFFER
-        y_spans[-1] += self._BUFFER
-        ys = np.cumsum(y_spans) - y_spans/2
-        adjust_next_layer_thickess = False
-        for layer, y, thickness in zip(self.geom.layers_stack, ys, y_spans):
-            if layer=='core':
-                self.y_core = y
-                adjust_next_layer_thickess = True
-                continue
-            if adjust_next_layer_thickess:
-                thickness += self.geom.layers_stack['core'][1]
-                y -= self.geom.layers_stack['core'][1]/2
-                adjust_next_layer_thickess = False
-            if self.geom.layers_stack[layer][0]=='air':
-                continue
-            self.addrect(
-                name=layer,
-                material=self.geom.layers_stack[layer][0],
-                x=self.x_sim_center,
-                x_span=x_span,
-                y=y,
-                y_span=thickness,
-                z_span=self._Z_SPAN
-            )
-        self._add_grating()
-
-    def _add_grating(self):
-        if self.layoutmode() == 0:
-            self.switchtolayout()
-        
-        # input waveguide
-        self.addrect(
-                name='core',
-                material=self.geom.layers_stack['core'][0],
-                x_min=-self._BUFFER - self.geom.input_wg_length,
-                x_max=0,
-                y=self.y_core,
-                y_span=self.geom.layers_stack['core'][1],
-                z_span=self._Z_SPAN
-            )
-
-        core_material = self.geom.layers_stack['core'][0]
-        x_min = 0
         self.addstructuregroup(name='grating')
-        for i in range(self.geom.n_segments):
-            for j in range(len(self.geom.duty_cycle)):
-                ff = self.geom.duty_cycle[j]
-                x_span = ff * self.geom.pitch
-                y_span = self.geom.grating_shape[j]
-                y = self.y_core - self.geom.layers_stack['core'][1]/2 + y_span/2
-                if x_span==0:
-                    continue
-                x_max = x_min + x_span
-                self.addrect(
-                    name=f'segment_{i}_section_{j}',
-                    material=core_material,
-                    x_min=x_min,
-                    x_max=x_max,
-                    y=y,
-                    y_span=y_span,
-                    z_span=self._Z_SPAN
-                )
+        for rect in build_rects(self.geom, self._BUFFER):
+            self.addrect(
+                name=rect.name,
+                material=rect.material,
+                x=(rect.x_min + rect.x_max) / 2,
+                x_span=rect.x_max - rect.x_min,
+                y=(rect.y_min + rect.y_max) / 2,
+                y_span=rect.y_max - rect.y_min,
+                z_span=self._Z_SPAN
+            )
+            if rect.in_grating:
                 self.addtogroup('grating')
-                x_min = x_max
-        x_max += self._BUFFER
-        self.addrect(
-            name='remaining core',
-            material=core_material,
-            x_min=x_min,
-            x_max=x_max,
-            y=self.y_core,
-            y_span=y_span,
-            z_span=self._Z_SPAN
-        )
-        self.addtogroup('grating')
-
 
     def _add_fdtd_solver(self):
         self.solver = self.addvarfdtd(
@@ -494,7 +624,7 @@ class GratingCoupler(LumerMODE):
                 y=self.source_loc[1],
                 y_span=7*self.geom.layers_stack['core'][1],
                 wavelength_start=self.source_wl_range[0],
-                wavelength_stop=self.source_wl_range[0],
+                wavelength_stop=self.source_wl_range[1],
             )
 
     def _add_monitor(self):
@@ -517,21 +647,19 @@ class GratingCoupler(LumerMODE):
             self.set('x span', self.sx - 2*self._BUFFER)
         
     def _setup_save_location(self, filename):
+        self._tempdir = None
         if filename:
-            self.save = True
-            self._filename = Path(filename)
-            self._savepath = self._filename.parent
-            if self._filename.suffix != '.lms':
-                self._filename = self._filename.with_suffix('.lms').name
-            if self._savepath != Path('.'):
-                os.makedirs(self._savepath, exist_ok=True)
+            path = Path(filename).with_suffix('.lms')
+            self._savepath = path.parent
+            self._filename = Path(path.name)
+            self._savepath.mkdir(parents=True, exist_ok=True)
         else:
             # Create a temporary directory for simulation
             self._tempdir = tempfile.TemporaryDirectory()
             atexit.register(self._cleanup_tempdir)  # Clean up after run
-            self._savepath = self._tempdir.name
+            self._savepath = Path(self._tempdir.name)
             self._filename = Path("temp_grating_model.lms")
-        super().save(str(self._savepath/self._filename))
+        super().save(str(self._savepath / self._filename))
 
     def _cleanup_tempdir(self):
         if self._tempdir:
