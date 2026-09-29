@@ -366,11 +366,12 @@ class GratingCoupler(LumerMODE):
         source_wl_range (Tuple[float, float], optional):
             The start and end wavelengths for the simulation source in meters.
             Defaults to (1450*nm, 1650*nm).
-        filename (Union[str, Path], optional):
+        save_as (Union[str, Path], optional):
             Path to save the Lumerical project file. If None, a temporary
             file is created and managed automatically. Defaults to None.
         **kwargs:
-            Additional keyword arguments passed to the parent `LumerMODE` class.
+            Additional keyword arguments passed to the parent `LumerMODE` class
+            (e.g. `filename` of the project to open, `hide`).
 
     Attributes:
         geom (GratingGeometry): An object holding the validated geometric parameters.
@@ -410,7 +411,7 @@ class GratingCoupler(LumerMODE):
             configuration='in',
             theta=20,
             source_wl_range=(1450*nm, 1650*nm),
-            filename:Union[str, Path]=None,
+            save_as:Union[str, Path]=None,
             **kwargs
         ):
         if LumerMODE is object:
@@ -438,7 +439,7 @@ class GratingCoupler(LumerMODE):
             _callback=self._on_param_change,
         )
 
-        self._setup_save_location(filename)
+        self._setup_save_location(save_as)
         self._initialize_objects()
 
     def _on_param_change(self, name, value):
@@ -564,15 +565,16 @@ class GratingCoupler(LumerMODE):
     def _create_geometry(self):
         self.addstructuregroup(name='grating')
         for rect in build_rects(self.geom, self._BUFFER):
-            self.addrect(
+            # material passed as addrect argument is not applied by lumapi
+            obj = self.addrect(
                 name=rect.name,
-                material=rect.material,
                 x=(rect.x_min + rect.x_max) / 2,
                 x_span=rect.x_max - rect.x_min,
                 y=(rect.y_min + rect.y_max) / 2,
                 y_span=rect.y_max - rect.y_min,
                 z_span=self._Z_SPAN
             )
+            obj.material = rect.material
             if rect.in_grating:
                 self.addtogroup('grating')
 
@@ -646,10 +648,10 @@ class GratingCoupler(LumerMODE):
             self.set('x', self.x_sim_center)
             self.set('x span', self.sx - 2*self._BUFFER)
         
-    def _setup_save_location(self, filename):
+    def _setup_save_location(self, save_as):
         self._tempdir = None
-        if filename:
-            path = Path(filename).with_suffix('.lms')
+        if save_as:
+            path = Path(save_as).with_suffix('.lms')
             self._savepath = path.parent
             self._filename = Path(path.name)
             self._savepath.mkdir(parents=True, exist_ok=True)
