@@ -92,7 +92,7 @@ class GratingGeometry:
     layers_stack: Dict[str, Tuple[str, float]]
     grating_shape: Iterable[float]
     pitch: float
-    duty_cycle: Union[float, Iterable[float]]
+    fill_factor: Union[float, Iterable[float]]
     n_segments: int
     input_wg_length: float
     core_only: bool = True
@@ -162,23 +162,23 @@ class GratingGeometry:
             self._validate_etch_depths()
 
     def _validate_duty_cycle(self):
-        if isinstance(self.duty_cycle, numbers.Number):
-            if not (0.0 <= self.duty_cycle <= 1.0):
-                raise ValueError(f"duty_cycle value has to be number between 0 and 1, got {self.duty_cycle}")
-            object.__setattr__(self, 'duty_cycle', [self.duty_cycle, 1.0 - self.duty_cycle])
-        elif isinstance(self.duty_cycle, Iterable):
-            object.__setattr__(self, 'duty_cycle', list(self.duty_cycle))
-            total = sum(self.duty_cycle)
+        if isinstance(self.fill_factor, numbers.Number):
+            if not (0.0 <= self.fill_factor <= 1.0):
+                raise ValueError(f"duty_cycle value has to be number between 0 and 1, got {self.fill_factor}")
+            object.__setattr__(self, 'duty_cycle', [1.0 - self.fill_factor, self.fill_factor])
+        elif isinstance(self.fill_factor, Iterable):
+            object.__setattr__(self, 'duty_cycle', list(self.fill_factor))
+            total = sum(self.fill_factor)
             if not abs(total - 1.0) < 1e-6:
                 raise ValueError(f"duty_cycle values must sum to 1, got {total}.")
         else:
             raise TypeError("duty_cycle must be a float or an iterable of floats.")
 
         n_sections = len(list(self.grating_shape))
-        if len(self.duty_cycle) != n_sections:
+        if len(self.fill_factor) != n_sections:
             raise ValueError(
                 f"duty_cycle must match length of grating_shape. "
-                f"Got {len(self.duty_cycle)} and {n_sections}."
+                f"Got {len(self.fill_factor)} and {n_sections}."
             )
 
     def _validate_core_only_shape(self):
@@ -269,7 +269,7 @@ def build_rects(geom: GratingGeometry, buffer: float) -> List[Rect]:
     intervals = [('input', -buffer - geom.input_wg_length, 0.0, y_top)]
     x = 0.0
     for i in range(geom.n_segments):
-        for j, (ff, surface) in enumerate(zip(geom.duty_cycle, surfaces)):
+        for j, (ff, surface) in enumerate(zip(geom.fill_factor, surfaces)):
             if ff == 0:
                 continue
             intervals.append((f'seg{i}_sec{j}', x, x + ff * geom.pitch, surface))
@@ -401,7 +401,7 @@ class GratingCoupler(LumerMODE):
             ),
             grating_shape=(150*nm, 220*nm),
             pitch=660*nm,
-            duty_cycle=0.45,
+            fill_factor=0.45,
             n_segments=25,
             input_wg_length=8*um,
             core_only=True,
@@ -434,7 +434,7 @@ class GratingCoupler(LumerMODE):
 
         # Instantiate ModelParameters with callback
         self.geom = GratingGeometry(
-            layers_stack, grating_shape, pitch, duty_cycle, n_segments, input_wg_length,
+            layers_stack, grating_shape, pitch, fill_factor, n_segments, input_wg_length,
             core_only=core_only, etch_from=etch_from, fill_material=fill_material,
             _callback=self._on_param_change,
         )
