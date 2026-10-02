@@ -183,4 +183,4 @@ misc/
 commit-message.*
 playground*
 temp/
-*.DS_Store
+.DS_Store
