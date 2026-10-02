@@ -224,7 +224,8 @@ class GratingCoupler2D(_GratingCouplerBase, LumerMODE):
                 0.8 * self.geom.layers_stack['core'][1] + self.y_core - self.y_sim_center
             ]]),
             polarization=POLARIZATION_MAP[self.polarization.lower()],
-            mesh_accuracy=5
+            mesh_accuracy=5,
+            simulation_time=15000e-15,
         )
         self.solver.set_simulation_bandwidth = 1
         self.solver.simulation_wavelength_min = self.source_wl_range[0]

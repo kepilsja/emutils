@@ -272,6 +272,7 @@ class GratingCoupler3D(_GratingCouplerBase, LumerFDTD):
             z=self.sz / 2,
             z_span=self.sz - 2 * self._BUFFER,
             mesh_accuracy=self.mesh_accuracy,
+            simulation_time=15000e-15
         )
         if self.use_symmetry:
             # TE mode: Ey is even in y, i.e. E is anti-symmetric as a vector
