@@ -1,4 +1,5 @@
 """2D grating coupler simulated with varFDTD in Lumerical MODE."""
+import numbers
 from typing import Union
 from pathlib import Path
 
@@ -73,6 +74,9 @@ class GratingCoupler2D(_GratingCouplerBase, LumerMODE):
         theta (float, optional):
             The angle in degrees for the Gaussian source, required for the 'in'
             configuration. Defaults to 20.
+        beam_waist_radius (float, optional):
+            The waist radius of the Gaussian source of the 'in' configuration in meters.
+            Defaults to 5.2*um (SMF-28 fiber, mode field diameter 10.4 um).
         source_wl_range (Tuple[float, float], optional):
             The start and end wavelengths for the simulation source in meters.
             Defaults to (1450*nm, 1650*nm).
@@ -90,6 +94,7 @@ class GratingCoupler2D(_GratingCouplerBase, LumerMODE):
         source (object): The Lumerical source object (ModeSource or GaussianSource).
         polarization (str): Light polarization ('te' or 'tm').
         theta (float): Source angle for 'in' configuration.
+        beam_waist_radius (float): Waist radius of the Gaussian source for 'in' configuration.
         configuration (str): Simulation type ('in' or 'out').
         source_wl_range (Tuple[float, float]): The wavelength range of the simulation.
         sx (float): The total simulation width in the x-direction.
@@ -117,6 +122,7 @@ class GratingCoupler2D(_GratingCouplerBase, LumerMODE):
             polarization='te',
             configuration='in',
             theta=20,
+            beam_waist_radius=5.2*um,
             source_wl_range=(1450*nm, 1650*nm),
             save_as:Union[str, Path]=None,
             **kwargs
@@ -127,9 +133,9 @@ class GratingCoupler2D(_GratingCouplerBase, LumerMODE):
         self._Z_SPAN = 50*um
         self._BUFFER = 2*um
         self._FREQ_POINTS = 81
-        self._BEAM_WAIST_RADIUS = 10*um
 
         self._init_parameters(polarization, theta, configuration, source_wl_range)
+        self.beam_waist_radius = beam_waist_radius
 
         # Instantiate ModelParameters with callback
         self.geom = GratingGeometry(
@@ -161,6 +167,18 @@ class GratingCoupler2D(_GratingCouplerBase, LumerMODE):
     def y_core(self):
         y_min, y_max = self.geom.layer_bounds(self._BUFFER)['core']
         return (y_min + y_max) / 2
+
+    @property
+    def beam_waist_radius(self):
+        return self._beam_waist_radius
+
+    @beam_waist_radius.setter
+    def beam_waist_radius(self, value):
+        if not isinstance(value, numbers.Number) or value <= 0:
+            raise ValueError(f'beam_waist_radius must be a positive number, got {value}')
+        self._beam_waist_radius = value
+        if self._IS_INITIALIZED and self.configuration == 'in':
+            self.source.waist_radius_w0 = value
 
     @property
     def source_loc(self):
@@ -248,7 +266,7 @@ class GratingCoupler2D(_GratingCouplerBase, LumerMODE):
                 x_span=self.sx,
                 y=self.source_loc[1],
                 angle_theta=-self._theta,
-                waist_radius_w0=self._BEAM_WAIST_RADIUS,
+                waist_radius_w0=self.beam_waist_radius,
                 set_wavelength=True,
                 wavelength_start=self.source_wl_range[0],
                 wavelength_stop=self.source_wl_range[1],
