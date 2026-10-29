@@ -38,14 +38,19 @@ class GratingCoupler2D(_GratingCouplerBase, LumerMODE):
             period. With `core_only=True` these are remaining core heights, otherwise
             etch depths measured from the top of `etch_from` layer.
             Defaults to (150*nm, 220*nm).
-        pitch (float, optional):
-            The period of the grating in meters. Defaults to 660*nm.
-        fill_factor (Union[float, Iterable[float]], optional):
-            The ratio(s) of the segment lengths within a single pitch. If a float,
-            it assumes a two-segment grating. If an iterable, its length must
-            match `grating_shape` and its values must sum to 1. Defaults to 0.45.
+        pitch (Union[float, Iterable[float]], optional):
+            The period of the grating in meters, or a sequence with the pitch of every
+            segment for an apodized grating. Defaults to 660*nm.
+        fill_factor (Union[float, Iterable[float], Iterable[Iterable[float]]], optional):
+            The ratio(s) of the segment lengths within a single pitch. If a float f,
+            it assumes a two-segment grating with ratios [1 - f, f] (f is the unetched
+            fraction). If an iterable, its length must match `grating_shape` and its
+            values must sum to 1. A 2D iterable of shape (n_segments, n_sections) gives
+            the ratios of every segment for an apodized grating (see
+            `linear_apodization`). Defaults to 0.45.
         n_segments (int, optional):
-            The total number of grating periods. Defaults to 25.
+            The total number of grating periods. Defaults to 25. With per-segment
+            `pitch` or `fill_factor` change it together with them via `geom.update`.
         input_wg_length (float, optional):
             The length of the input waveguide before the grating region in meters.
             Defaults to 8*um.
@@ -138,7 +143,7 @@ class GratingCoupler2D(_GratingCouplerBase, LumerMODE):
 
     @property
     def sx(self):
-        return self.geom.input_wg_length + self.geom.n_segments * self.geom.pitch + 2*self._BUFFER
+        return self.geom.input_wg_length + self.geom.grating_length() + 2*self._BUFFER
 
     @property
     def sy(self):

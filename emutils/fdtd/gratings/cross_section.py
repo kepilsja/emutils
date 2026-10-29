@@ -22,18 +22,20 @@ def profile_intervals(geom: GratingGeometry, buffer: float, include_input: bool 
     """
     Splits the propagation axis into intervals (label, x_min, x_max, surface level).
     Grating starts at x=0, input waveguide (if included) spans x < 0, tail of length
-    `buffer` follows the last segment.
+    `buffer` follows the last segment. Every segment uses its own pitch and fill factor
+    (see `GratingGeometry.segment_pitches` and `segment_fill_factors`).
     """
     y_top, _, surfaces = geom.section_surfaces(buffer)
 
     intervals = [('input', -buffer - geom.input_wg_length, 0.0, y_top)] if include_input else []
     x = 0.0
-    for i in range(geom.n_segments):
-        for j, (ff, surface) in enumerate(zip(geom.fill_factor, surfaces)):
+    segments = zip(geom.segment_pitches(), geom.segment_fill_factors())
+    for i, (pitch, fill_factor) in enumerate(segments):
+        for j, (ff, surface) in enumerate(zip(fill_factor, surfaces)):
             if ff == 0:
                 continue
-            intervals.append((f'seg{i}_sec{j}', x, x + ff * geom.pitch, surface))
-            x += ff * geom.pitch
+            intervals.append((f'seg{i}_sec{j}', x, x + ff * pitch, surface))
+            x += ff * pitch
     intervals.append(('tail', x, x + buffer, y_top))
     return intervals
 

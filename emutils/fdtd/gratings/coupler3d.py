@@ -29,7 +29,8 @@ class GratingCoupler3D(_GratingCouplerBase, LumerFDTD):
         core_only, etch_from, fill_material, polarization, configuration, theta,
         source_wl_range, save_as:
             See `GratingCoupler2D`. `input_wg_length` is the length of the straight
-            waveguide before the taper (defaults to 5*um).
+            waveguide before the taper (defaults to 5*um). Apodized gratings (varying
+            `pitch` or `fill_factor`) are not supported yet.
         taper_length (float, optional): Distance from the focal point to the first
             grating line. Defaults to 15*um.
         taper_angle (float, optional): Full opening angle of the taper in degrees.
@@ -117,7 +118,7 @@ class GratingCoupler3D(_GratingCouplerBase, LumerFDTD):
 
     @property
     def grating_length(self):
-        return self.geom.n_segments * self.geom.pitch
+        return self.geom.grating_length()
 
     @property
     def x_sim_min(self):

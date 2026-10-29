@@ -43,16 +43,20 @@ class GratingGeometry:
               any number of layers, e.g. through the top cladding and partially
               into the core, or deep into the substrate.
 
-        pitch (float):
-            The period of the grating (in meters).
+        pitch (Union[float, Iterable[float]]):
+            The period of the grating (in meters). A sequence of length `n_segments`
+            gives the pitch of every segment (apodized grating).
 
-        fill_factor (Union[float, Iterable[float]]):
+        fill_factor (Union[float, Iterable[float], Iterable[Iterable[float]]]):
             Ratio(s) defining the proportions of the segments lengths in coupler section.
-            If an iterable, must sum to 1 and match the number of sections
-            in a single segment.
+            A float f is a two-section grating with ratios [1 - f, f]. If an iterable of
+            floats, must sum to 1 and match the number of sections in a single segment.
+            A 2D iterable of shape (n_segments, n_sections) gives the ratios of every
+            segment (apodized grating), each row must sum to 1.
 
         n_segments (int):
-            Number of segments in the grating. Must be greater than 1.
+            Number of segments in the grating. Must be greater than 1. Change it with
+            `update` together with per-segment `pitch` / `fill_factor`.
 
         input_wg_length (float):
             Length of the input waveguide before the grating. Must be positive.
@@ -77,8 +81,8 @@ class GratingGeometry:
     """
     layers_stack: Dict[str, Tuple[str, float]]
     grating_shape: Iterable[float]
-    pitch: float
-    fill_factor: Union[float, Iterable[float]]
+    pitch: Union[float, Iterable[float]]
+    fill_factor: Union[float, Iterable[float], Iterable[Iterable[float]]]
     n_segments: int
     input_wg_length: float
     core_only: bool = True
@@ -138,35 +142,86 @@ class GratingGeometry:
         if not isinstance(self.input_wg_length, numbers.Number) or self.input_wg_length <= 0:
             raise ValueError("input_wg_length must be a positive number.")
 
-        if not isinstance(self.pitch, numbers.Number) or self.pitch <= 0:
-            raise ValueError("pitch must be a positive number.")
-
+        self._validate_pitch()
         self._validate_fill_factor()
         if self.core_only:
             self._validate_core_only_shape()
         else:
             self._validate_etch_depths()
 
+    def _validate_pitch(self):
+        if isinstance(self.pitch, numbers.Number):
+            if self.pitch <= 0:
+                raise ValueError("pitch must be a positive number.")
+            return
+        if not isinstance(self.pitch, Iterable):
+            raise TypeError("pitch must be a number or an iterable of numbers.")
+
+        pitches = list(self.pitch)
+        if len(pitches) != self.n_segments:
+            raise ValueError(
+                f"Per-segment pitch must have n_segments ({self.n_segments}) values, got {len(pitches)}."
+            )
+        if not all(isinstance(p, numbers.Number) and p > 0 for p in pitches):
+            raise ValueError("Per-segment pitch values must be positive numbers.")
+        object.__setattr__(self, 'pitch', pitches)
+
     def _validate_fill_factor(self):
+        per_segment = False
         if isinstance(self.fill_factor, numbers.Number):
             if not (0.0 <= self.fill_factor <= 1.0):
                 raise ValueError(f"fill_factor value has to be number between 0 and 1, got {self.fill_factor}")
             object.__setattr__(self, 'fill_factor', [1.0 - self.fill_factor, self.fill_factor])
         elif isinstance(self.fill_factor, Iterable):
-            object.__setattr__(self, 'fill_factor', list(self.fill_factor))
-            total = sum(self.fill_factor)
-            if not abs(total - 1.0) < 1e-6:
-                raise ValueError(f"fill_factor values must sum to 1, got {total}.")
+            fill_factor = list(self.fill_factor)
+            per_segment = bool(fill_factor) and all(isinstance(row, Iterable) for row in fill_factor)
+            if per_segment:
+                fill_factor = [list(row) for row in fill_factor]
+                if len(fill_factor) != self.n_segments:
+                    raise ValueError(
+                        f"Per-segment fill_factor must have n_segments ({self.n_segments}) rows, "
+                        f"got {len(fill_factor)}."
+                    )
+            object.__setattr__(self, 'fill_factor', fill_factor)
 
         else:
             raise TypeError("fill_factor must be a float or an iterable of floats.")
 
+        for row in (self.fill_factor if per_segment else [self.fill_factor]):
+            self._validate_section_ratios(row)
+
+    def _validate_section_ratios(self, ratios):
+        if not all(0.0 <= ff <= 1.0 for ff in ratios):
+            raise ValueError(f"fill_factor values have to be numbers between 0 and 1, got {ratios}.")
+        total = sum(ratios)
+        if not abs(total - 1.0) < 1e-6:
+            raise ValueError(f"fill_factor values must sum to 1, got {total}.")
+
         n_sections = len(list(self.grating_shape))
-        if len(self.fill_factor) != n_sections:
+        if len(ratios) != n_sections:
             raise ValueError(
                 f"fill_factor must match length of grating_shape. "
-                f"Got {len(self.fill_factor)} and {n_sections}."
+                f"Got {len(ratios)} and {n_sections}."
             )
+
+    def segment_pitches(self):
+        """Pitch of every grating segment, array of shape (n_segments,)."""
+        return np.full(self.n_segments, self.pitch, dtype=float)
+
+    def segment_fill_factors(self):
+        """Section ratios of every grating segment, array of shape (n_segments, n_sections)."""
+        fill_factor = np.asarray(self.fill_factor, dtype=float)
+        return np.full((self.n_segments, fill_factor.shape[-1]), fill_factor)
+
+    def grating_length(self):
+        """Total length of the grating (sum of all segment pitches)."""
+        return float(self.segment_pitches().sum())
+
+    def is_apodized(self):
+        """True if the pitch or the fill factor varies between segments."""
+        pitches = self.segment_pitches()
+        fill_factors = self.segment_fill_factors()
+        return bool(np.any(pitches != pitches[0]) or np.any(fill_factors != fill_factors[0]))
 
     def _validate_core_only_shape(self):
         core_thickness = self.layers_stack['core'][1]
@@ -279,6 +334,9 @@ class FocusingGratingGeometry(GratingGeometry):
 
     def _validate(self):
         super()._validate()
+
+        if self.is_apodized():
+            raise ValueError("Apodized gratings (varying pitch or fill_factor) are supported only in 2D for now.")
 
         for name in ('taper_length', 'wg_width'):
             value = getattr(self, name)

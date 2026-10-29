@@ -4,7 +4,7 @@ from emutils import um, nm
 from emutils.fdtd import gratings
 from emutils.fdtd.gratings import (
     GratingGeometry, FocusingGratingGeometry, build_rects, profile_intervals, layer_runs,
-    confocal_ellipticity, analyze_spectrum,
+    confocal_ellipticity, analyze_spectrum, phase_matched_pitch, linear_apodization,
 )
 
 BUFFER = 2*um
@@ -54,7 +54,7 @@ class TestGratingGeometry(unittest.TestCase):
                 self.assertAlmostEqual(r.y_min, y, delta=1e-15, msg=f"gap/overlap at x={x}")
                 y = r.y_max
         self.assertAlmostEqual(x_min, -BUFFER - geom.input_wg_length)
-        self.assertAlmostEqual(x_max, geom.n_segments*geom.pitch + BUFFER)
+        self.assertAlmostEqual(x_max, geom.grating_length() + BUFFER)
         self.assertAlmostEqual(y, bounds['oxide_cladding'][1])
 
     def sample_x(self, section):
@@ -163,6 +163,67 @@ class TestGratingGeometry(unittest.TestCase):
         self.assertEqual(calls, ['pitch', 'update'])
         self.assertTiled(geom, build_rects(geom, BUFFER))
 
+    def test_constant_per_segment_arrays_match_scalars(self):
+        uniform = make_geom()
+        arrays = make_geom(pitch=[PITCH]*5, fill_factor=[[1 - FF, FF]]*5)
+        self.assertFalse(arrays.is_apodized())
+        self.assertEqual(set(build_rects(uniform, BUFFER)), set(build_rects(arrays, BUFFER)))
+
+    def test_apodized_layout(self):
+        pitches = PITCH * np.linspace(1.0, 0.95, 5)
+        tooth = np.linspace(0.9, 0.5, 5)
+        geom = make_geom(pitch=pitches, fill_factor=np.column_stack((1 - tooth, tooth)))
+        self.assertTrue(geom.is_apodized())
+        self.assertAlmostEqual(geom.grating_length(), pitches.sum(), delta=1e-15)
+        rects = build_rects(geom, BUFFER)
+        self.assertTiled(geom, rects)
+
+        starts = np.concatenate(([0.0], np.cumsum(pitches)[:-1]))
+        trenches = [r for r in rects if r.name.startswith('core_seg') and r.name.endswith('sec0')]
+        self.assertEqual(len(trenches), 5)
+        for r, x0, pitch, ff in zip(trenches, starts, pitches, tooth):
+            self.assertAlmostEqual(r.x_min, x0, delta=1e-15)
+            self.assertAlmostEqual(r.x_max - r.x_min, (1 - ff)*pitch, delta=1e-15)
+
+        teeth = [r for r in rects if r.name.startswith('core_seg') and r.name.endswith('sec1')]
+        self.assertEqual(len(teeth), 4)  # the last one is merged with the tail
+        for r, pitch, ff in zip(teeth, pitches, tooth):
+            self.assertAlmostEqual(r.x_max - r.x_min, ff*pitch, delta=1e-15)
+
+    def test_apodized_unetched_start_merges(self):
+        tooth = [1.0, 1.0, 0.8, 0.6, 0.5]
+        geom = make_geom(fill_factor=[[1 - ff, ff] for ff in tooth])
+        rects = build_rects(geom, BUFFER)
+        self.assertTiled(geom, rects)
+        merged = next(r for r in rects if r.name == 'core_input-seg1_sec1')
+        self.assertAlmostEqual(merged.x_max, 2*PITCH, delta=1e-15)
+        trenches = [r for r in rects if r.name.startswith('core_seg') and r.name.endswith('sec0')]
+        self.assertEqual([r.name for r in trenches], ['core_seg2_sec0', 'core_seg3_sec0', 'core_seg4_sec0'])
+
+    def test_apodized_validation(self):
+        with self.assertRaises(ValueError):
+            make_geom(pitch=[PITCH]*4)
+        with self.assertRaises(ValueError):
+            make_geom(pitch=[PITCH]*4 + [-PITCH])
+        with self.assertRaises(ValueError):
+            make_geom(fill_factor=[[0.5, 0.5]]*4)
+        with self.assertRaises(ValueError):
+            make_geom(fill_factor=[[0.5, 0.5]]*4 + [[0.6, 0.6]])
+        with self.assertRaises(ValueError):
+            make_geom(fill_factor=[[0.2, 0.3, 0.5]]*5)
+        with self.assertRaises(ValueError):
+            make_geom(fill_factor=(1.2, -0.2))
+
+    def test_apodized_update(self):
+        calls = []
+        geom = make_geom(pitch=[PITCH]*5, _callback=lambda k, v: calls.append(k))
+        with self.assertRaises(ValueError):
+            geom.n_segments = 6
+        self.assertEqual(geom.n_segments, 5)
+        geom.update(n_segments=6, pitch=[PITCH]*6, fill_factor=[[1 - FF, FF]]*6)
+        self.assertEqual(calls, ['update'])
+        self.assertTiled(geom, build_rects(geom, BUFFER))
+
 
 def make_focusing_geom(**kwargs):
     params = dict(
@@ -212,6 +273,13 @@ class TestFocusingGratingGeometry(unittest.TestCase):
         with self.assertRaises(ValueError):
             make_focusing_geom(grating_shape=(150*nm, 300*nm))  # inherited validation
 
+    def test_rejects_apodization(self):
+        with self.assertRaises(ValueError):
+            make_focusing_geom(pitch=PITCH * np.linspace(1.0, 0.95, 5))
+        with self.assertRaises(ValueError):
+            make_focusing_geom(fill_factor=[[0.5, 0.5]]*4 + [[0.6, 0.4]])
+        self.assertFalse(make_focusing_geom(pitch=[PITCH]*5).is_apodized())
+
     def test_update_and_callback(self):
         calls = []
         geom = make_focusing_geom(_callback=lambda k, v: calls.append(k))
@@ -256,6 +324,44 @@ class TestFocusingGratingGeometry(unittest.TestCase):
         np.testing.assert_allclose(vertices[0], [geom.taper_join_x(), -geom.wg_width/2])
         np.testing.assert_allclose(vertices[-1], [geom.taper_join_x(), geom.wg_width/2])
         np.testing.assert_allclose(np.hypot(*vertices[1:-1].T), geom.taper_length)
+
+
+class TestApodization(unittest.TestCase):
+    PARAMS = dict(wavelength=1550*nm, n_eff_tooth=2.85, n_eff_trench=2.55, theta=20)
+
+    def test_phase_matched_pitch(self):
+        ff = np.array([0.45, 0.9])
+        pitch = phase_matched_pitch(ff, **self.PARAMS)
+        n_eff = ff*2.85 + (1 - ff)*2.55
+        np.testing.assert_allclose(pitch * (n_eff - np.sin(np.radians(20))), 1550*nm)
+        with self.assertRaises(ValueError):
+            phase_matched_pitch(0.5, 1550*nm, 0.3, 0.2, theta=20)
+
+    def test_linear_apodization(self):
+        rate = 0.025/um
+        pitches, ff = linear_apodization(20, 0.9, rate, **self.PARAMS)
+        self.assertEqual(pitches.shape, (20,))
+        self.assertEqual(ff.shape, (20, 2))
+        np.testing.assert_allclose(ff.sum(axis=1), 1)
+        starts = np.concatenate(([0.0], np.cumsum(pitches)[:-1]))
+        np.testing.assert_allclose(ff[:, 1], 0.9 - rate*starts)
+        np.testing.assert_allclose(pitches, phase_matched_pitch(ff[:, 1], **self.PARAMS))
+        geom = make_geom(n_segments=20, pitch=pitches, fill_factor=ff)
+        self.assertTrue(geom.is_apodized())
+        self.assertAlmostEqual(geom.grating_length(), pitches.sum(), delta=1e-15)
+
+    def test_linear_apodization_clipping(self):
+        _, ff = linear_apodization(20, 0.9, 0.1/um, ff_min=0.4, **self.PARAMS)
+        self.assertAlmostEqual(ff[:, 1].min(), 0.4)
+
+        min_feature = 60*nm
+        pitches, ff = linear_apodization(20, 1.0, 0.025/um, min_feature=min_feature, **self.PARAMS)
+        widths = ff * pitches[:, None]
+        self.assertTrue(np.all(widths >= min_feature * (1 - 1e-9)))
+        self.assertAlmostEqual(widths[0, 0], min_feature, delta=1e-15)  # first trench is clipped
+
+        with self.assertRaises(ValueError):
+            linear_apodization(5, 0.9, 0.025/um, min_feature=400*nm, **self.PARAMS)
 
 
 class TestAnalyzeSpectrum(unittest.TestCase):
